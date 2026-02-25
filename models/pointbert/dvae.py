@@ -3,9 +3,14 @@ import torch
 import torch.nn.functional as F
 from models.pointbert import misc
 
-from knn_cuda import KNN
-
-knn = KNN(k=4, transpose_mode=False)
+# knn_cuda patched out — pure-PyTorch KNN
+def _knn_pytorch(k, coor_k, coor_q):
+    """Pure-PyTorch KNN. coor: (B,3,N). Returns (None, idx) where idx:(B,k,N_q)."""
+    ck = coor_k.permute(0, 2, 1)          # (B, N_k, 3)
+    cq = coor_q.permute(0, 2, 1)          # (B, N_q, 3)
+    dist = torch.cdist(cq, ck)             # (B, N_q, N_k)
+    idx = dist.topk(k, dim=-1, largest=False).indices  # (B, N_q, k)
+    return None, idx.permute(0, 2, 1)      # (B, k, N_q)
 
 
 class DGCNN(nn.Module):
@@ -51,7 +56,7 @@ class DGCNN(nn.Module):
         num_points_q = x_q.size(2)
 
         with torch.no_grad():
-            _, idx = knn(coor_k, coor_q)  # bs k np
+            _, idx = _knn_pytorch(k, coor_k, coor_q)  # bs k np
             assert idx.shape[1] == k
             idx_base = torch.arange(0, batch_size, device=x_q.device).view(-1, 1, 1) * num_points_k
             idx = idx + idx_base

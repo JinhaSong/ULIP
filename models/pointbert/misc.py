@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 from collections import abc
-from pointnet2_ops import pointnet2_utils
+# pointnet2_ops patched out — using pure-PyTorch FPS
 
 
 # def fps(data, number):
@@ -60,13 +60,22 @@ def index_points(points, idx):
 #     return index_points(xyz, centroids)
 
 def fps(data, number):
+    '''Pure-PyTorch FPS (patched: no pointnet2_ops required).
+       data: (B, N, 3)   number: int
     '''
-        data B N 3
-        number int
-    '''
-    fps_idx = pointnet2_utils.furthest_point_sample(data, number) 
-    fps_data = pointnet2_utils.gather_operation(data.transpose(1, 2).contiguous(), fps_idx).transpose(1,2).contiguous()
-    return fps_data
+    device = data.device
+    B, N, C = data.shape
+    centroids = torch.zeros(B, number, dtype=torch.long, device=device)
+    distance = torch.full((B, N), 1e10, device=device)
+    farthest = torch.randint(0, N, (B,), dtype=torch.long, device=device)
+    batch_idx = torch.arange(B, dtype=torch.long, device=device)
+    for i in range(number):
+        centroids[:, i] = farthest
+        centroid = data[batch_idx, farthest, :].view(B, 1, 3)
+        dist = torch.sum((data - centroid) ** 2, dim=-1)
+        distance = torch.min(distance, dist)
+        farthest = torch.max(distance, dim=-1)[1]
+    return index_points(data, centroids)
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
