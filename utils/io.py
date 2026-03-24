@@ -1,7 +1,11 @@
 import h5py
 import numpy as np
-import open3d
 import os
+
+try:
+    import open3d as _open3d
+except ImportError:
+    _open3d = None
 
 class IO:
     @classmethod
@@ -28,7 +32,9 @@ class IO:
     # Support PCD files without compression ONLY!
     @classmethod
     def _read_pcd(cls, file_path):
-        pc = open3d.io.read_point_cloud(file_path)
+        if _open3d is None:
+            raise ImportError("open3d is required to read .pcd files: pip install open3d")
+        pc = _open3d.io.read_point_cloud(file_path)
         ptcloud = np.array(pc.points)
         return ptcloud
 
